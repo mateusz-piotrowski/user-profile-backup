@@ -1,12 +1,12 @@
-# new-git-repo-template
+# User profile backup
 
 ## Description
 
-The project contains basic files to the new git repository.
+The project contains shell script to backup user profile directory.
 
 ## Motivation
 
-The projects has been created to easier setup new git repository.
+The project has been created to make backups easier.
 
 ## Installation
 

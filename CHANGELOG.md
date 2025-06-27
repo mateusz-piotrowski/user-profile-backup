@@ -1,5 +1,13 @@
 # The Changelog
 
+## [0.0.] (June 28 2025)
+
+**Updated :**
+
+- LICENSE
+- CHANGELOG.md
+- README.md
+
 ## [0.0.1] (March 11 2022)
 
 **Added :**
