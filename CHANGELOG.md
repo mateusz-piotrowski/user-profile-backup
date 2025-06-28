@@ -5,6 +5,7 @@
 **Added :**
 
 - .gitignore
+- user-profile-backup.sh
 
 **Updated :**
 
