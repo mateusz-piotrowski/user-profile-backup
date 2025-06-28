@@ -1,6 +1,10 @@
 # The Changelog
 
-## [0.0.] (June 28 2025)
+## [0.0.2] (June 28 2025)
+
+**Added :**
+
+- .gitignore
 
 **Updated :**
 
