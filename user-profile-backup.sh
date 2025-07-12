@@ -4,62 +4,60 @@
 # SECTION: Script Metadata
 #---
 # Script Name: user-profile-backup.sh
-# Description: Briefly describe the purpose of this script.
-# Author: Your Name <your.email@example.com>
-# Version: 1.0.0
+# Description: A robust script to back up a user's home directory using rsync.
+# Author: Mateusz Piotrowski <mateusz7piotrowski@gmail.com>
+# Version: 1.3.0
 # License: MIT (or choose a suitable license like GPL, Apache 2.0)
 # Created Date: 2024-06-20
-# Last Modified Date: 2024-06-20
+# Last Modified Date: 2025-07-13
 
 #---
 # SECTION: Configuration and Environment Setup
 #---
 
 # Exit immediately if a command exits with a non-zero status.
-# This prevents subsequent commands from running if an earlier one failed.
 set -o errexit
 
 # Treat unset variables and parameters as an error when performing parameter expansion.
-# This helps catch typos and ensures variables are intentionally defined.
 set -o nounset
 
-# The return value of a pipeline is the status of the last command to exit with a non-zero status,
-# or zero if all commands in the pipeline exit successfully. Essential for robust error checking in pipelines.
+# The return value of a pipeline is the status of the last command to exit with a non-zero status.
 set -o pipefail
-
-# Optional: Enable a debug mode where all executed commands are printed to stderr.
-# Uncomment for debugging.
-# set -o xtrace
-
-# Optional: Internal Field Separator. Commonly set to newline to prevent word splitting issues
-# with filenames containing spaces, but use with caution as it affects all word splitting.
-# IFS=$'\n\t'
 
 # Define script-specific variables
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-readonly LOG_FILE="${SCRIPT_DIR}/${SCRIPT_NAME%.*}.log" # Log file name based on script name
+readonly START_DATE=$(date "+%Y-%m-%d %H:%M:%S")
+readonly LOG_FILE="${SCRIPT_DIR}/${SCRIPT_NAME%.*}_$START_DATE.log"
+
+# --- External Configuration Loading ---
+readonly CONFIG_FILE="${SCRIPT_DIR}/user-profile-backup.conf"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "FATAL: Configuration file not found at: ${CONFIG_FILE}" >&2
+    echo "Please ensure 'user-profile-backup.conf' exists in the same directory as the script." >&2
+    exit 1
+fi
+
+# Source the configuration file to load variables like SOURCE_DIR, BACKUP_DIR, etc.
+# shellcheck source=/dev/null
+source "${CONFIG_FILE}"
 
 # Default values for script options/flags
 VERBOSE=0
 DRY_RUN=0
-# Add your custom default variables here, e.g.:
-# CONFIG_ENABLED=0
 
 #---
 # SECTION: Helper Functions
 #---
 
-# log(): Function for consistent logging. Messages are printed to stderr for immediate display
-# and appended to a log file for persistent records.
-# Usage: log "Your message here" [LEVEL]
-# Levels: INFO (default), WARN, ERROR, DEBUG
+# log(): Function for consistent logging.
 log() {
     local message="$1"
     local level="${2:-INFO}" # Default level is INFO
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
-    # Determine color based on log level (for terminal output only)
     local color_code="\033[0m" # Reset
     case "${level}" in
         INFO)  color_code="\033[0;32m";; # Green
@@ -76,7 +74,6 @@ log() {
 }
 
 # error_exit(): Logs an error message and exits the script with a failure status.
-# Usage: error_exit "Reason for failure." [EXIT_CODE]
 error_exit() {
     local message="$1"
     local exit_code="${2:-1}" # Default exit code is 1
@@ -85,17 +82,14 @@ error_exit() {
 }
 
 # usage(): Displays the script's usage information and exits.
-# Usage: usage
 usage() {
     echo "Usage: ${SCRIPT_NAME} [OPTIONS]"
-    echo "A boilerplate script demonstrating best practices."
+    echo "Performs a robust backup of the user's home directory."
     echo ""
     echo "Options:"
-    echo "  -v, --verbose    Enable verbose output (shows DEBUG messages)."
-    echo "  -d, --dry-run    Simulate actions without making actual changes."
+    echo "  -v, --verbose    Enable verbose output from rsync."
+    echo "  -d, --dry-run    Simulate backup without making actual changes."
     echo "  -h, --help       Display this help message and exit."
-    # Add your custom options here, e.g.:
-    # echo "  -c, --config     Enable a specific configuration mode."
     echo ""
     echo "Examples:"
     echo "  ${SCRIPT_NAME} --verbose"
@@ -104,54 +98,53 @@ usage() {
     exit 0
 }
 
-# parse_args(): Parses command-line arguments and sets script variables accordingly.
-# Only handles options/flags.
+# parse_args(): Parses command-line arguments.
 parse_args() {
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
             -v|--verbose)
                 VERBOSE=1
-                log "Verbose mode enabled." "DEBUG"
-                shift # Consume the argument
+                shift
                 ;;
             -d|--dry-run)
                 DRY_RUN=1
-                log "Dry run mode enabled. No actual changes will be made." "WARN"
                 shift
                 ;;
             -h|--help)
-                usage # Calls the usage function and exits
+                usage
                 ;;
-            # Add your custom option parsing here, e.g.:
-            # -c|--config)
-            #     CONFIG_ENABLED=1
-            #     log "Configuration mode enabled." "DEBUG"
-            #     shift
-            #     ;;
-            --) # End of all options
+            --)
                 shift
-                break # Stop processing options, remaining are positional arguments (which we don't expect)
+                break
                 ;;
             -*)
                 error_exit "Unknown or invalid option: '$1'. Use -h for help."
                 ;;
-            *) # Any remaining argument is unexpected if no positional arguments are needed
-                error_exit "Unexpected argument: '$1'. This script does not accept positional arguments. Use -h for help."
+            *)
+                error_exit "Unexpected argument: '$1'. This script does not accept positional arguments."
                 ;;
         esac
     done
-
-    log "Arguments parsed successfully." "DEBUG"
 }
 
-# validate_dependencies(): Checks for necessary commands/executables.
+# validate_dependencies(): Checks for necessary commands and directories.
 validate_dependencies() {
     log "Validating script dependencies..." "DEBUG"
-    # Example: Check for `curl`
-    if ! command -v curl &> /dev/null; then
-        error_exit "Required command 'curl' not found. Please install it."
+    if ! command -v rsync &> /dev/null; then
+        error_exit "Required command 'rsync' not found. Please install it."
     fi
-    # Add more dependency checks here as needed
+    if [[ ! -d "${SOURCE_DIR}" ]]; then
+        error_exit "Source directory not found: ${SOURCE_DIR}"
+    fi
+
+    if [[ ! -d "${BACKUP_DIR}" ]]; then
+        log "Backup destination directory not found. Creating it: ${BACKUP_DIR}" "WARN"
+        mkdir -p "${BACKUP_DIR}" || error_exit "Failed to create backup destination directory: ${BACKUP_DIR}"
+    fi
+
+    if [[ ! -f "${EXCLUDE_FILE}" ]]; then
+        error_exit "Exclude file not found: ${EXCLUDE_FILE}"
+    fi
     log "All required dependencies found." "DEBUG"
 }
 
@@ -159,29 +152,38 @@ validate_dependencies() {
 main() {
     log "Script '${SCRIPT_NAME}' started."
 
-    # Perform dependency validation
     validate_dependencies
 
-    # Example of conditional logic based on parsed options/flags
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log "Dry run mode enabled. Simulating backup without making changes." "WARN"
+    fi
+
+    log "Starting backup from '${SOURCE_DIR}' to '${BACKUP_DIR}'."
+
+    # Build the rsync command options in an array for robustness
+    local rsync_opts=()
+    rsync_opts+=(-bvh --delete --delete-excluded --recursive)
+    rsync_opts+=("--exclude-from=${EXCLUDE_FILE}")
+
     if [[ "${VERBOSE}" -eq 1 ]]; then
-        log "Verbose output is active for main logic." "INFO"
+        rsync_opts+=(-h --progress)
+        log "Verbose mode enabled." "DEBUG"
     fi
 
     if [[ "${DRY_RUN}" -eq 1 ]]; then
-        log "This is a dry run. No actual changes will be made." "WARN"
-        log "Simulating primary operation..."
-        # Add dry-run specific logic here
-    else
-        log "Executing actual script operations."
-        # Place your core script logic here.
-        # This is where the main work of your script happens.
-        echo "Performing the main task of the script..."
-        # Example:
-        # Some_command --option value
-        # Another_command "some_input"
+        rsync_opts+=(--dry-run)
     fi
 
-    log "Script '${SCRIPT_NAME}' finished successfully."
+    # Execute the backup
+    rsync "${rsync_opts[@]}" "${SOURCE_DIR}/" "${BACKUP_DIR}/" >> "${LOG_FILE}" 2>&1
+
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log "Dry run simulation finished successfully."
+    else
+        log "Backup completed successfully."
+    fi
+
+    log "Script '${SCRIPT_NAME}' finished."
 }
 
 #---
@@ -191,11 +193,8 @@ main() {
 # Ensure a log file exists or is created before any logging
 touch "${LOG_FILE}" || error_exit "Failed to create log file: ${LOG_FILE}"
 
-# Capture all arguments passed to the script (which should only be options here)
 parse_args "$@"
 
-# Call the main function to start the script's primary logic
 main
 
-# Exit with success status
 exit 0

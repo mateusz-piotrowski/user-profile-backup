@@ -1,0 +1,14 @@
+# User name (usually current user)
+USER_NAME=$(whoami)
+
+# Source directory to back up
+SOURCE_DIR="/home/$USER_NAME"
+
+# Backup destination directory
+BACKUP_DIR="/run/media/$USER_NAME/destination"
+
+# Path to exclude file listing directories/files to skip
+EXCLUDE_FILE="/home/$USER_NAME/bin/user-profile-backup/excluded.txt"
+
+# Directory where logs are stored
+LOG_DIR="/home/$USER_NAME/bin/user-profile-backup/logs"

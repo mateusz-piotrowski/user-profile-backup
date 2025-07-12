@@ -1,5 +1,16 @@
 # The Changelog
 
+## [0.0.3] (July 13 2025)
+
+**Added :**
+
+- backup.conf.example
+- excluded.conf.example
+
+**Updated :**
+
+- user-profile-backup.sh
+
 ## [0.0.2] (June 28 2025)
 
 **Added :**
